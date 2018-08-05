@@ -7,8 +7,8 @@ import sys, traceback
 from pythonosc import dispatcher
 from pythonosc import osc_server
 
-STEP_DELAY = 0.0030     # STEP_DELAY between steps 
-STEPS_24HRS = 6800      # total number of steps in 24 hours on the clock face
+STEP_DELAY = 0.0050     # STEP_DELAY between steps 
+STEPS_24HRS = 7455    # total number of steps in 24 hours on the clock face
 
 OSC_LISTEN = "0.0.0.0"  # default listen on address (0.0.0.0 = all)
 OSC_PORT = 5005         # default listen on address (0.0.0.0 = all)
@@ -51,20 +51,33 @@ def runForward(steps):
 
 def forward_handler(unused_addr, args, mins):
     print("forward {} for {} mins".format(args, mins))
-    runForward(mins * int(STEPS_24HRS/24/60))
+    runForward(int(mins) * int(STEPS_24HRS/24/60))
+    setStep(0,0,0,0)
 
 def backward_handler(unused_addr, args, mins):
     print("backward {} for {} mins".format(args, mins))
-    runBackward(mins * int(STEPS_24HRS/24/60))
+    runBackward(int(mins) * int(STEPS_24HRS/24/60))
+    setStep(0,0,0,0)
 
-def preset_handler(unused_addr, args):
+def preset_handler(unused_addr, args, unused_arg):
     print("preset {}".format(args))
+    global RUN_PRESET
+    RUN_PRESET = True
+    while RUN_PRESET:
+        runForward(1)
+    setStep(0,0,0,0)
 
-def stop_handler(unused_addr, args):
+def stop_handler(unused_addr, args, unused_arg):
     print("stop {}".format(args))
+    global RUN_PRESET
+    RUN_PRESET=False
+    setStep(0,0,0,0)
 
 def main():
     try:
+        global RUN_PRESET
+        RUN_PRESET = False
+        
         # Set PIN states
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
