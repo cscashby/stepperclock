@@ -6,9 +6,10 @@ import argparse
 import sys, traceback
 from pythonosc import dispatcher
 from pythonosc import osc_server
+from subprocess import call
 
-STEP_DELAY = 0.0050     # STEP_DELAY between steps 
-STEPS_24HRS = 7455    # total number of steps in 24 hours on the clock face
+STEP_DELAY = 0.0025     # STEP_DELAY between steps 
+STEPS_WAITIR = 50      # Steps to wait until activating IR LED
 
 OSC_LISTEN = "0.0.0.0"  # default listen on address (0.0.0.0 = all)
 OSC_PORT = 5005         # default listen on address (0.0.0.0 = all)
@@ -19,6 +20,10 @@ COIL_B_1_PIN = 17
 COIL_B_2_PIN = 18
 COIL_A_1_PIN = 22
 COIL_A_2_PIN = 23
+
+# IR Sensor and Paired LED behind '12' to detect minute hand at zero
+IRSENSE_PIN = 24
+LED_PIN = 25
 
 # Function for step sequence
 def setStep(w1, w2, w3, w4):
@@ -49,35 +54,35 @@ def runForward(steps):
         setStep(1,0,1,0)
         time.sleep(STEP_DELAY)
 
-def forward_handler(unused_addr, args, mins):
-    print("forward {} for {} mins".format(args, mins))
-    runForward(int(mins) * int(STEPS_24HRS/24/60))
+def forward_handler(unused_addr, args, hrs):
+    print("forward {} for {} hours".format(args, hrs))
+    GPIO.output(LED_PIN, 1)
+    for i in range(int(hrs)):
+        count = 0
+        while count < STEPS_WAITIR or GPIO.input(IRSENSE_PIN) == 1:
+            count += 1
+            runForward(1)
+    GPIO.output(LED_PIN, 0)
     setStep(0,0,0,0)
 
-def backward_handler(unused_addr, args, mins):
-    print("backward {} for {} mins".format(args, mins))
-    runBackward(int(mins) * int(STEPS_24HRS/24/60))
+def backward_handler(unused_addr, args, hrs):
+    print("backward {} for {} hrs".format(args, hrs))
+    GPIO.output(LED_PIN, 1)
+    for i in range(int(hrs)):
+        count = 0
+        while count < STEPS_WAITIR or GPIO.input(IRSENSE_PIN) == 1:
+            count += 1
+            runBackward(1)
+    GPIO.output(LED_PIN, 0)
     setStep(0,0,0,0)
 
-def preset_handler(unused_addr, args, unused_arg):
-    print("preset {}".format(args))
-    global RUN_PRESET
-    RUN_PRESET = True
-    while RUN_PRESET:
-        runForward(1)
+def shutdown_handler(unused_addr, args, unused_arg):
+    print("shutdown {}".format(args))
     setStep(0,0,0,0)
-
-def stop_handler(unused_addr, args, unused_arg):
-    print("stop {}".format(args))
-    global RUN_PRESET
-    RUN_PRESET=False
-    setStep(0,0,0,0)
+    call("sudo poweroff", shell=True)
 
 def main():
     try:
-        global RUN_PRESET
-        RUN_PRESET = False
-        
         # Set PIN states
         GPIO.setmode(GPIO.BCM)
         GPIO.setwarnings(False)
@@ -85,12 +90,13 @@ def main():
         GPIO.setup(COIL_A_2_PIN, GPIO.OUT)
         GPIO.setup(COIL_B_1_PIN, GPIO.OUT)
         GPIO.setup(COIL_B_2_PIN, GPIO.OUT)
+        GPIO.setup(IRSENSE_PIN, GPIO.IN)
+        GPIO.setup(LED_PIN, GPIO.OUT)
 
         d = dispatcher.Dispatcher()
-        d.map("/forward", forward_handler, "Clock forwards")
-        d.map("/backward", backward_handler, "Clock backwards")
-        d.map("/preset", preset_handler, "Clock forwards until stopped - preset to midday")
-        d.map("/stop", stop_handler, "Stop clock")
+        d.map("/forward", forward_handler, "Clock forwards (hours)")
+        d.map("/backward", backward_handler, "Clock backwards (hours)")
+        d.map("/shutdown", shutdown_handler, "Shutdown Pi nicely")
 
         server = osc_server.ThreadingOSCUDPServer((OSC_LISTEN, OSC_PORT), d)
         print("OSC listening on {} port {}".format(OSC_LISTEN, OSC_PORT))
