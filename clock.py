@@ -10,6 +10,7 @@ from subprocess import call
 
 STEP_DELAY = 0.0025     # STEP_DELAY between steps 
 STEPS_WAITIR = 50      # Steps to wait until activating IR LED
+STEPS_MAX = 1000 # Steps to stop after if IR fails us
 
 OSC_LISTEN = "0.0.0.0"  # default listen on address (0.0.0.0 = all)
 OSC_PORT = 5005         # default listen on address (0.0.0.0 = all)
@@ -62,6 +63,8 @@ def forward_handler(unused_addr, args, hrs):
         while count < STEPS_WAITIR or GPIO.input(IRSENSE_PIN) == 1:
             count += 1
             runForward(1)
+            if count > STEPS_MAX:
+                break
     GPIO.output(LED_PIN, 0)
     setStep(0,0,0,0)
 
@@ -73,6 +76,8 @@ def backward_handler(unused_addr, args, hrs):
         while count < STEPS_WAITIR or GPIO.input(IRSENSE_PIN) == 1:
             count += 1
             runBackward(1)
+            if count > STEPS_MAX:
+                break
     GPIO.output(LED_PIN, 0)
     setStep(0,0,0,0)
 
@@ -80,6 +85,11 @@ def shutdown_handler(unused_addr, args, unused_arg):
     print("shutdown {}".format(args))
     setStep(0,0,0,0)
     call("sudo poweroff", shell=True)
+
+def reboot_handler(unused_addr, args, unused_arg):
+    print("reboot {}".format(args))
+    setStep(0,0,0,0)
+    call("sudo reboot", shell=True)
 
 def main():
     try:
@@ -97,6 +107,7 @@ def main():
         d.map("/forward", forward_handler, "Clock forwards (hours)")
         d.map("/backward", backward_handler, "Clock backwards (hours)")
         d.map("/shutdown", shutdown_handler, "Shutdown Pi nicely")
+        d.map("/reboot", reboot_handler, "Reboot Pi nicely")
 
         server = osc_server.ThreadingOSCUDPServer((OSC_LISTEN, OSC_PORT), d)
         print("OSC listening on {} port {}".format(OSC_LISTEN, OSC_PORT))
